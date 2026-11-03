@@ -80,6 +80,9 @@
   .sugg button { display: block; width: 100%; text-align: left; padding: 12px; border: 0; background: none; cursor: pointer; border-bottom: 1px solid #f0ebe0; }
   .sugg button:hover, .sugg button.act { background: var(--green-soft); }
   .sugg small { color: var(--muted); }
+  .sugg .act-row { color: var(--green); font-weight: 700; }
+  .sugg .sugg-note { padding: 12px; font-size: 14px; color: var(--muted); }
+  .sugg .attrib { display: block; padding: 6px 12px; font-size: 11px; }
   .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   .chip { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 12px; font-size: 14px; cursor: pointer; }
   .chip:hover { border-color: var(--green); }
@@ -165,7 +168,7 @@
   <section class="view" id="view-find">
     <div class="card">
       <h2>Where are you going?</h2>
-      <p class="sub">Pick two stops. Njila finds the drops to take and where to change.</p>
+      <p class="sub">Type a stop or any place in Lusaka. Njila finds the drops to take, where to change and how far to walk.</p>
       <div class="row">
         <div class="grow">
           <div class="field">
@@ -353,7 +356,7 @@ const HUBS = { kulima: { label: "Kulima Tower", color: "var(--kt)", hex: "#1f5fa
                citymkt: { label: "City Market", color: "var(--cm)", hex: "#c2571a" },
                millennium: { label: "Millennium", color: "var(--ml)", hex: "#2f7d4a" } };
 const OTHER = { label: "Other", color: "var(--ot)", hex: "#7a4fa0" };
-const WALK_ORIGIN = 1000, WALK_TRANSFER = 900, WALK_HUB = 2200;
+const WALK_ORIGIN = 1000, WALK_TRANSFER = 900, WALK_HUB = 2200, WALK_PLACE = 2500;
 
 const state = {
   stops: new Map(BASE_STOPS.map(s => [s.id, s])),
@@ -362,7 +365,7 @@ const state = {
   ready: { routes: false },
   from: null, to: null, results: [], highlight: null,
   draft: [], hubFilter: "all", statusFilter: "all", openRoute: null,
-  mapPick: null, addingStop: false, newStopAt: null,
+  mapPick: null, mapPoint: null, addingStop: false, newStopAt: null,
 };
 
 /* ---------------- utilities ---------------- */
@@ -432,7 +435,8 @@ function rideInfo(route, from, to) {
 }
 function search(o, dst) {
   const { at, tr } = buildIndex();
-  const O = nearby(o, WALK_ORIGIN), D = nearby(dst, WALK_ORIGIN);
+  const reach = id => S(id).place ? WALK_PLACE : WALK_ORIGIN; // a typed place may be further from a stop
+  const O = nearby(o, reach(o)), D = nearby(dst, reach(dst));
   const out = [];
   const direct = walkM(S(o), S(dst));
   if (o !== dst && direct <= ((S(o).hub && S(dst).hub) ? WALK_HUB : WALK_ORIGIN)) {
@@ -501,11 +505,49 @@ function search(o, dst) {
   return out2.slice(0, 5);
 }
 
+/* ---------------- places (anything that isn't a stop) ---------------- */
+// A place is a temporary stop with no routes; search walks from it to nearby stops.
+let placeSeq = 0;
+function addPlace(p) {
+  const s = { id: "place_" + (++placeSeq), name: p.name, detail: p.detail || "", lat: p.lat, lng: p.lng, hub: false, aliases: [], base: false, place: true };
+  state.stops.set(s.id, s); return s;
+}
+function prunePlaces() {
+  for (const s of [...state.stops.values()]) if (s.place && s.id !== state.from && s.id !== state.to) state.stops.delete(s.id);
+}
+function nearestStop(p) {
+  let best = null, bd = Infinity;
+  for (const s of state.stops.values()) { if (s.place) continue; const d = walkM(p, s); if (d < bd) { bd = d; best = s; } }
+  return best && { stop: best, m: bd };
+}
+// OpenStreetMap Nominatim: called only on an explicit search (no per-keystroke autocomplete), max 1 request/s.
+const geoCache = new Map(); let geoLast = 0;
+async function geocode(q) {
+  const k = q.trim().toLowerCase(); if (geoCache.has(k)) return geoCache.get(k);
+  const wait = geoLast + 1100 - Date.now(); if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  geoLast = Date.now();
+  const u = "https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", countrycodes: "zm",
+    viewbox: "28.10,-15.25,28.60,-15.65", bounded: "1", limit: "6", "accept-language": "en" });
+  const res = await fetch(u); if (!res.ok) throw new Error("geocode " + res.status);
+  const list = (await res.json()).map(r => { const parts = String(r.display_name || "").split(",").map(x => x.trim());
+    return { name: r.name || parts[0], detail: parts.slice(1, 3).join(", "), lat: +r.lat, lng: +r.lon }; })
+    .filter(p => p.name && isFinite(p.lat) && isFinite(p.lng));
+  geoCache.set(k, list); return list;
+}
+function locate() {
+  return new Promise((ok, no) => {
+    if (!navigator.geolocation) return no(new Error("This browser can't share your location. Type a place instead."));
+    navigator.geolocation.getCurrentPosition(p => ok({ name: "Your location", lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => no(new Error("Couldn't get your location. Allow location access, or type a place.")), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  });
+}
+
 /* ---------------- autocomplete ---------------- */
 function matchStops(q) {
   q = q.trim().toLowerCase(); if (!q) return [];
   const res = [];
   for (const s of state.stops.values()) {
+    if (s.place) continue;
     const names = [s.name, ...(s.aliases || [])].map(x => x.toLowerCase());
     let sc = -1;
     names.forEach((n, i) => { if (n.startsWith(q)) sc = Math.max(sc, i ? 2 : 3); else if (n.includes(q)) sc = Math.max(sc, 1); });
@@ -514,13 +556,29 @@ function matchStops(q) {
   return res.sort((a, b) => b[0] - a[0] || a[1].name.localeCompare(b[1].name)).slice(0, 8).map(x => x[1]);
 }
 function servedBy(id) { return activeRoutes().filter(r => r.stops.includes(id)).length; }
-function autocomplete(input, box, onPick) {
-  let items = [], act = -1;
+function autocomplete(input, box, onPick, places = false) {
+  let items = [], act = -1, geo = null; // geo: place lookup results for the current text
+  const itemHtml = (it, q) => {
+    if (it.stop) { const s = it.stop; return `${esc(s.name)}<br><small>${s.hub ? "Bus station · " : ""}${servedBy(s.id)} route${servedBy(s.id)===1?"":"s"}${s.base ? "" : " · added by a rider"}</small>`; }
+    if (it.place) { const n = nearestStop(it.place); return `${esc(it.place.name)}<br><small>${esc(it.place.detail || "Place")}${n ? ` · ${fmtM(n.m)} from ${esc(n.stop.name)}` : ""}</small>`; }
+    if (it.act === "loc") return `<span class="act-row">Use my current location</span>`;
+    return `<span class="act-row">Search places for “${esc(q)}”</span><br><small>Not a stop? Find a street, building or area in Lusaka</small>`;
+  };
   const render = () => {
-    items = matchStops(input.value);
-    if (!items.length) { box.classList.remove("on"); box.innerHTML = ""; return; }
-    box.innerHTML = items.map((s, i) => `<button type="button" role="option" class="${i===act?'act':''}" data-id="${esc(s.id)}">${esc(s.name)}<br><small>${s.hub ? "Bus station · " : ""}${servedBy(s.id)} route${servedBy(s.id)===1?"":"s"}${s.base ? "" : " · added by a rider"}</small></button>`).join("");
+    const q = input.value.trim();
+    if (geo && geo.q !== q) geo = null;
+    items = geo ? geo.list.map(p => ({ place: p })) : matchStops(q).map(s => ({ stop: s }));
+    if (places && !geo) { if (q.length >= 3) items.push({ act: "geo" }); if (!q) items.unshift({ act: "loc" }); }
+    if (!items.length && !geo) { box.classList.remove("on"); box.innerHTML = ""; return; }
+    box.innerHTML = (items.length ? items.map((it, i) => `<button type="button" role="option" class="${i===act?'act':''}" data-i="${i}">${itemHtml(it, q)}</button>`).join("")
+      : `<div class="sugg-note">No place called “${esc(q)}” found in Lusaka. Try a nearby landmark, or tap the spot on the Map tab.</div>`)
+      + (geo ? `<small class="attrib">Places © OpenStreetMap contributors</small>` : "");
     box.classList.add("on");
+  };
+  const lookup = async q => {
+    box.innerHTML = `<div class="sugg-note">Searching places…</div>`; box.classList.add("on");
+    try { geo = { q, list: await geocode(q) }; act = -1; render(); }
+    catch { box.innerHTML = `<div class="sugg-note">Couldn't search places just now. Check your connection, or tap the spot on the Map tab.</div>`; }
   };
   input.addEventListener("input", () => { act = -1; render(); });
   input.addEventListener("focus", render);
@@ -531,16 +589,24 @@ function autocomplete(input, box, onPick) {
     else if (e.key === "Enter") { const s = items[act >= 0 ? act : 0]; if (s) { pick(s); e.preventDefault(); } }
     else if (e.key === "Escape") box.classList.remove("on");
   });
-  const pick = s => { box.classList.remove("on"); onPick(s); };
+  const pick = it => {
+    if (it.act === "geo") { lookup(input.value.trim()); return; }
+    box.classList.remove("on");
+    if (it.stop) onPick(it.stop);
+    else if (it.place) onPick(addPlace(it.place));
+    else if (it.act === "loc") { toast("Finding your location…"); locate().then(p => onPick(addPlace(p)), e => toast(e.message)); }
+  };
   box.addEventListener("mousedown", e => e.preventDefault());
-  box.addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b) pick(S(b.dataset.id)); });
+  box.addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b && items[+b.dataset.i]) pick(items[+b.dataset.i]); });
   input.addEventListener("blur", () => setTimeout(() => box.classList.remove("on"), 120));
 }
 
 /* ---------------- FIND view ---------------- */
 function setEnd(which, s) {
+  if (s && s.place) state.stops.set(s.id, s);
   state[which] = s ? s.id : null;
   $("#" + which).value = s ? s.name : "";
+  prunePlaces();
 }
 function resolveTyped(which) {
   const v = $("#" + which).value.trim(); if (!v) return null;
@@ -548,16 +614,33 @@ function resolveTyped(which) {
   if (cur && cur.name === v) return cur;
   const m = matchStops(v); return m[0] || null;
 }
-function runSearch(push = true) {
-  const a = resolveTyped("from"), b = resolveTyped("to");
-  setEnd("from", a); setEnd("to", b);
-  const box = $("#results");
-  if (!a || !b) { box.innerHTML = `<div class="card note">Choose both stops from the suggestions list.</div>`; return; }
+let searchSeq = 0;
+async function runSearch(push = true) {
+  const seq = ++searchSeq, box = $("#results");
+  let a = resolveTyped("from"), b = resolveTyped("to");
+  const qa = $("#from").value.trim(), qb = $("#to").value.trim();
+  if (!qa || !qb) { box.innerHTML = `<div class="card note">Type where you're starting from and where you're going.</div>`; return; }
+  // not a known stop: look the text up as a place
+  if (!a || !b) {
+    box.innerHTML = `<div class="card empty">Looking up ${esc(!a ? qa : qb)}…</div>`;
+    try {
+      if (!a) { const r = await geocode(qa); a = r[0] ? addPlace(r[0]) : null; }
+      if (!b) { const r = await geocode(qb); b = r[0] ? addPlace(r[0]) : null; }
+    } catch {
+      if (seq === searchSeq) box.innerHTML = `<div class="card note">Couldn't look up places just now. Check your connection, pick a stop from the suggestions, or tap the spot on the Map tab.</div>`;
+      return;
+    }
+    if (seq !== searchSeq) return;
+  }
+  if (a) setEnd("from", a); if (b) setEnd("to", b);
+  if (!a || !b) {
+    box.innerHTML = `<div class="card note">Couldn't find “${esc(!a ? qa : qb)}” in Lusaka. Try a nearby landmark or stop, or tap the spot on the Map tab.</div>`; return;
+  }
   if (a.id === b.id) { box.innerHTML = `<div class="card note">From and To are the same stop.</div>`; return; }
   if (!state.ready.routes) { box.innerHTML = `<div class="card empty">Still loading routes…</div>`; return; }
   state.results = search(a.id, b.id);
   state.highlight = null;
-  if (push) remember(a, b);
+  if (push && !a.place && !b.place) remember(a, b);
   renderResults();
 }
 function legHtml(l, i, alts) {
@@ -584,6 +667,13 @@ function itinText(it) {
 function renderResults() {
   const box = $("#results"), res = state.results;
   const a = S(state.from), b = S(state.to);
+  if (!res.length && (a.place || b.place)) {
+    const p = [a, b].find(x => x.place && (nearestStop(x) || { m: 0 }).m > WALK_PLACE), far = p && nearestStop(p);
+    box.innerHTML = `<div class="card"><b>No route found yet from ${esc(a.name)} to ${esc(b.name)}.</b>
+      <p class="meta">${far ? `The nearest stop to ${esc(p.name)} is ${esc(far.stop.name)}, about ${fmtM(far.m)} away. Njila doesn't know a minibus closer than that yet.`
+        : "Nobody has added routes that connect stops near these places within 3 drops."} If you know a stop or route there, add it on the Map or Add tab.</p></div>`;
+    return;
+  }
   if (!res.length) {
     box.innerHTML = `<div class="card"><b>No route found yet from ${esc(a.name)} to ${esc(b.name)}.</b>
       <p class="meta">Nobody has added a route that connects these stops within 3 drops. If you know one, add it so the next rider finds it.</p>
@@ -703,6 +793,7 @@ function renderMap() {
     }
   }
   if (state.newStopAt) el("circle", { cx: proj.x(state.newStopAt.lng), cy: proj.y(state.newStopAt.lat), r: 8 * u, fill: "#b4582a", stroke: "#fff", "stroke-width": 2 * u }, gS);
+  if (state.mapPoint) el("circle", { cx: proj.x(state.mapPoint.lng), cy: proj.y(state.mapPoint.lat), r: 7 * u, fill: "#1f5fa8", stroke: "#fff", "stroke-width": 2 * u }, gS);
   renderStopCard();
 }
 function renderLegend() {
@@ -715,16 +806,28 @@ function renderLegend() {
 }
 function renderStopCard() {
   const box = $("#stopcard"); const s = state.mapPick && S(state.mapPick);
+  if (!s && state.mapPoint) {
+    const n = nearestStop(state.mapPoint), name = n ? `Pin near ${n.stop.name}` : "Pin on map";
+    box.innerHTML = `<div class="card stopcard"><b>${esc(name)}</b> <span class="small">Dropped pin</span>
+      <p class="meta" style="margin:6px 0 10px">${n ? `Nearest stop: ${esc(n.stop.name)}, about ${fmtM(n.m)} walk.` : ""}</p>
+      <div class="actions"><button class="btn sm" id="sf">From here</button><button class="btn sm" id="stt">To here</button>
+      <button class="btn sm ghost" id="sx">Clear pin</button></div></div>`;
+    const use = which => { const p = addPlace({ name, lat: state.mapPoint.lat, lng: state.mapPoint.lng }); state.mapPoint = null;
+      setEnd(which, p); go("find"); if (state.from && state.to) runSearch(); };
+    $("#sf").onclick = () => use("from"); $("#stt").onclick = () => use("to");
+    $("#sx").onclick = () => { state.mapPoint = null; renderMap(); };
+    return;
+  }
   if (!s) { box.innerHTML = state.highlight ? `<div class="card stopcard note green">Showing your trip. <button class="btn sm ghost" id="clearhl">Clear</button></div>` : "";
     if ($("#clearhl")) $("#clearhl").onclick = () => { state.highlight = null; renderMap(); }; return; }
   const rs = activeRoutes().filter(r => r.stops.includes(s.id));
-  box.innerHTML = `<div class="card stopcard"><b>${esc(s.name)}</b> <span class="small">${s.hub ? "Bus station" : "Stop"}${s.base ? "" : " · added by a rider"}</span>
-    <p class="meta" style="margin:6px 0 10px">${rs.length ? rs.map(r => esc(r.name)).join(" · ") : "No routes stop here yet."}</p>
+  box.innerHTML = `<div class="card stopcard"><b>${esc(s.name)}</b> <span class="small">${s.place ? "Place (not a stop)" : s.hub ? "Bus station" : "Stop"}${s.base || s.place ? "" : " · added by a rider"}</span>
+    <p class="meta" style="margin:6px 0 10px">${s.place ? "Njila walks you to the nearest stops from here." : rs.length ? rs.map(r => esc(r.name)).join(" · ") : "No routes stop here yet."}</p>
     <div class="actions"><button class="btn sm" id="sf">From here</button><button class="btn sm" id="stt">To here</button>
-    <button class="btn sm ghost" id="sd">${state.draft.includes(s.id) ? "In your new route" : "Add to new route"}</button></div></div>`;
+    ${s.place ? "" : `<button class="btn sm ghost" id="sd">${state.draft.includes(s.id) ? "In your new route" : "Add to new route"}</button>`}</div></div>`;
   $("#sf").onclick = () => { setEnd("from", s); state.mapPick = null; go("find"); if (state.to) runSearch(); };
   $("#stt").onclick = () => { setEnd("to", s); state.mapPick = null; go("find"); if (state.from) runSearch(); };
-  $("#sd").onclick = () => { if (!state.draft.includes(s.id)) { state.draft.push(s.id); renderDraft(); toast(`Added ${s.name} as stop ${state.draft.length}`); renderMap(); } };
+  if ($("#sd")) $("#sd").onclick = () => { if (!state.draft.includes(s.id)) { state.draft.push(s.id); renderDraft(); toast(`Added ${s.name} as stop ${state.draft.length}`); renderMap(); } };
 }
 function initMapInteraction() {
   const m = $("#map"); let drag = null;
@@ -743,7 +846,9 @@ function initMapInteraction() {
     if (state.addingStop) { state.newStopAt = { lat: proj.lat(p.y), lng: proj.lng(p.x) }; renderMap(); renderAddStopForm(); return; }
     let best = null, bd = Infinity;
     for (const s of state.stops.values()) { const dd = Math.hypot(proj.x(s.lng) - p.x, proj.y(s.lat) - p.y); if (dd < bd) { bd = dd; best = s; } }
-    state.mapPick = best && bd < 22 * p.s ? best.id : null; renderMap();
+    state.mapPick = best && bd < 22 * p.s ? best.id : null;
+    state.mapPoint = state.mapPick ? null : { lat: proj.lat(p.y), lng: proj.lng(p.x) }; // empty spot: drop a pin
+    renderMap();
   });
   m.addEventListener("wheel", e => { e.preventDefault(); zoom(e.deltaY < 0 ? .8 : 1.25, toSvg(e.clientX, e.clientY)); }, { passive: false });
   $("#zin").onclick = () => zoom(.7); $("#zout").onclick = () => zoom(1.4); $("#zfit").onclick = () => { fitAll(); renderMap(); };
@@ -903,7 +1008,7 @@ window.addEventListener("hashchange", () => show(location.hash.slice(1)));
 
 function refreshAll() {
   const n = activeRoutes().length;
-  $("#status").textContent = !state.db ? "Offline view" : !state.ready.routes ? "Loading…" : `${n} route${n===1?"":"s"} · ${state.stops.size} stops`;
+  $("#status").textContent = !state.db ? "Offline view" : !state.ready.routes ? "Loading…" : `${n} route${n===1?"":"s"} · ${[...state.stops.values()].filter(s => !s.place).length} stops`;
   const v = location.hash.slice(1) || "find";
   if (v === "routes") renderRoutes(); if (v === "map") renderMap(); if (v === "add") renderDraft();
   if (v === "find" && state.results.length && state.from && state.to) { state.results = search(state.from, state.to); renderResults(); }
@@ -911,11 +1016,11 @@ function refreshAll() {
 
 /* ---------------- boot ---------------- */
 function boot() {
-  autocomplete($("#from"), $("#from-sugg"), s => { setEnd("from", s); if (state.to) runSearch(); else $("#to").focus(); });
-  autocomplete($("#to"), $("#to-sugg"), s => { setEnd("to", s); if (state.from) runSearch(); });
+  autocomplete($("#from"), $("#from-sugg"), s => { setEnd("from", s); if (state.to) runSearch(); else $("#to").focus(); }, true);
+  autocomplete($("#to"), $("#to-sugg"), s => { setEnd("to", s); if (state.from) runSearch(); }, true);
   autocomplete($("#addq"), $("#add-sugg"), s => { if (!state.draft.includes(s.id)) state.draft.push(s.id); $("#addq").value = ""; renderDraft(); });
   $("#go").onclick = () => runSearch();
-  $("#swap").onclick = () => { const a = state.from, b = state.to; setEnd("from", b && S(b)); setEnd("to", a && S(a)); if (a && b) runSearch(); };
+  $("#swap").onclick = () => { const a = state.from && S(state.from), b = state.to && S(state.to); setEnd("from", b); setEnd("to", a); if (a && b) runSearch(); };
   $("#rq").addEventListener("input", renderRoutes);
   $("#submitroute").onclick = submitRoute;
   $("#addstop").onclick = () => {
@@ -948,6 +1053,7 @@ async function connect() {
     const m = new Map(BASE_STOPS.map(s => [s.id, s]));
     snap.docs.forEach(d => { const x = d.data(); if (d.exists && x && typeof x.lat === "number" && typeof x.lng === "number" && x.name)
       m.set("u_" + d.id, { id: "u_" + d.id, name: String(x.name), lat: x.lat, lng: x.lng, hub: false, aliases: [], base: false, docId: d.id }); });
+    for (const s of state.stops.values()) if (s.place) m.set(s.id, s);
     state.stops = m; refreshAll();
   }, () => {});
   db.collection("votes").onSnapshot(snap => {

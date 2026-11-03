@@ -19,6 +19,17 @@ const CASES = [['Chelstone', 'Chawama', 2], ['UNZA', 'UTH', 2], ['Matero', 'Make
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${from} -> ${to}: ${head.trim() || 'no result'}`);
     if (!ok) failed++;
   }
+  // A place that isn't a stop: the OpenStreetMap lookup is faked so the test runs offline.
+  await page.route('https://nominatim.openstreetmap.org/**', r => r.fulfill({ contentType: 'application/json',
+    body: JSON.stringify([{ name: 'Levy Junction', display_name: 'Levy Junction, Church Road, Lusaka', lat: '-15.4160', lon: '28.2950' }]) }));
+  await page.fill('#from', 'Levy Junction'); await page.fill('#to', 'Chelstone');
+  await page.keyboard.press('Escape'); await page.click('#go');
+  await page.waitForSelector('#results .rhead', { timeout: 3000 }).catch(() => {});
+  const placeHead = (await page.textContent('#results .rhead').catch(() => '')) || '';
+  const placeSteps = (await page.textContent('#results .steps').catch(() => '')) || '';
+  const placeOk = parseInt(placeHead, 10) >= 1 && /Walk to/.test(placeSteps);
+  console.log(`${placeOk ? 'PASS' : 'FAIL'}  Levy Junction (place) -> Chelstone: ${placeHead.trim() || 'no result'}`);
+  if (!placeOk) failed++;
   if (errors.length) { console.log('Page errors:', errors); failed++; }
   await browser.close();
   process.exit(failed ? 1 : 0);
