@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Njila — Lusaka minibus route finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --paper: #fffdf8;
+    --ink: #1d2320;
+    --muted: #5c645f;
+    --line: #ddd6c8;
+    --green: #17603f;
+    --green-soft: #e3efe7;
+    --copper: #b4582a;
+    --copper-soft: #f6e6dc;
+    --warn: #a4320f;
+    --kt: #1f5fa8;
+    --cm: #c2571a;
+    --ml: #2f7d4a;
+    --ot: #7a4fa0;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(29,35,32,.06), 0 4px 16px rgba(29,35,32,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+    font-size: 16px; line-height: 1.45;
+    background: var(--bg); color: var(--ink);
+    min-height: 100vh;
+    padding-bottom: 76px;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--green); color: #fff;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
+  .brand b { font-size: 22px; letter-spacing: .5px; }
+  .brand span { font-size: 13px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.16); white-space: nowrap; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  .view { display: none; }
+  .view.on { display: block; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  label.f { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin: 0 0 4px; text-transform: uppercase; letter-spacing: .4px; }
+  .field { position: relative; margin-bottom: 12px; }
+  input[type=text], input[type=number], select {
+    width: 100%; min-height: 48px; padding: 10px 12px;
+    border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > .grow { flex: 1; min-width: 0; }
+  .btn {
+    min-height: 48px; padding: 10px 16px; border-radius: 10px; border: 1.5px solid var(--green);
+    background: var(--green); color: #fff; font-weight: 700; cursor: pointer;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--green); }
+  .btn.copper { background: var(--copper); border-color: var(--copper); }
+  .btn.sm { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  .btn.icon { width: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .btn.full { width: 100%; }
+  .sugg {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 30;
+    background: #fff; border: 1.5px solid var(--line); border-radius: 10px; margin-top: 4px;
+    box-shadow: var(--shadow); max-height: 260px; overflow: auto; display: none;
+  }
+  .sugg.on { display: block; }
+  .sugg button { display: block; width: 100%; text-align: left; padding: 12px; border: 0; background: none; cursor: pointer; border-bottom: 1px solid #f0ebe0; }
+  .sugg button:hover, .sugg button.act { background: var(--green-soft); }
+  .sugg small { color: var(--muted); }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 12px; font-size: 14px; cursor: pointer; }
+  .chip:hover { border-color: var(--green); }
+  .result { border-left: 5px solid var(--green); }
+  .result.best { border-left-color: var(--copper); }
+  .rhead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .rhead b { font-size: 18px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  ol.steps { list-style: none; padding: 0; margin: 12px 0 8px; }
+  ol.steps li { position: relative; padding: 4px 0 12px 30px; }
+  ol.steps li::before { content: ""; position: absolute; left: 9px; top: 12px; bottom: -4px; width: 2px; background: var(--line); }
+  ol.steps li:last-child::before { display: none; }
+  ol.steps li .dot { position: absolute; left: 2px; top: 6px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--green); background: #fff; }
+  ol.steps li.walk .dot { border-color: var(--muted); border-style: dotted; }
+  ol.steps li.end .dot { background: var(--copper); border-color: var(--copper); }
+  .rname { font-weight: 700; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; vertical-align: 1px; white-space: nowrap; }
+  .b-ver { background: var(--green-soft); color: var(--green); }
+  .b-seed { background: #ece7f3; color: #5a3a7c; }
+  .b-new { background: #fdf2c9; color: #7a5a00; }
+  .b-dis { background: #f8dcd2; color: var(--warn); }
+  .b-ret { background: #e7e7e7; color: #555; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .note { background: var(--copper-soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .note.green { background: var(--green-soft); }
+  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+  /* map */
+  .mapwrap { position: relative; background: #fbf8f1; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; touch-action: none; }
+  #map { display: block; width: 100%; height: 62vh; min-height: 360px; cursor: grab; user-select: none; }
+  #map.adding { cursor: crosshair; }
+  .mapctl { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .mapctl button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 22px; font-weight: 700; cursor: pointer; box-shadow: var(--shadow); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
+  .legend i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+  .stopcard { margin-top: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .filters .chip.on { background: var(--green); color: #fff; border-color: var(--green); }
+  /* routes list */
+  .rlist { list-style: none; margin: 0; padding: 0; }
+  .rlist li { border-bottom: 1px solid #efe9dc; }
+  .rlist li:last-child { border-bottom: 0; }
+  .rlist button.ritem { width: 100%; text-align: left; border: 0; background: none; padding: 12px 4px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .rlist button.ritem:hover { background: #faf6ee; }
+  .swatch { width: 10px; align-self: stretch; border-radius: 4px; flex: none; }
+  .rdetail { padding: 4px 4px 14px 24px; }
+  .stopseq { font-size: 14px; color: var(--muted); margin: 6px 0 10px; }
+  .farebox { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .farebox input { max-width: 120px; }
+  /* add route */
+  .seq { list-style: none; padding: 0; margin: 8px 0 12px; counter-reset: s; }
+  .seq li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); counter-increment: s; }
+  .seq li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--green-soft); color: var(--green); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  .seq li span { flex: 1; }
+  .seq li button { border: 0; background: none; cursor: pointer; font-size: 18px; width: 36px; height: 36px; border-radius: 8px; color: var(--muted); }
+  .seq li button:hover { background: #f1ece2; color: var(--ink); }
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    background: var(--paper); border-top: 1px solid var(--line);
+    display: flex; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav.tabs a {
+    flex: 1; max-width: 190px; text-align: center; padding: 8px 4px 10px; text-decoration: none; color: var(--muted);
+    font-size: 13px; font-weight: 700; border-top: 3px solid transparent;
+  }
+  nav.tabs a svg { display: block; margin: 0 auto 2px; }
+  nav.tabs a.on { color: var(--green); border-top-color: var(--green); }
+  #toast { position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; z-index: 40; }
+  #toast.on { opacity: 1; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .small { font-size: 13px; color: var(--muted); }
+  a { color: var(--green); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b>Njila</b><span>Lusaka minibus route finder</span></div>
+  <span class="pill" id="status">Loading…</span>
+</header>
+
+<main>
+  <!-- FIND -->
+  <section class="view" id="view-find">
+    <div class="card">
+      <h2>Where are you going?</h2>
+      <p class="sub">Pick two stops. Njila finds the drops to take and where to change.</p>
+      <div class="row">
+        <div class="grow">
+          <div class="field">
+            <label class="f" for="from">From</label>
+            <input type="text" id="from" placeholder="e.g. Chelstone" autocomplete="off">
+            <div class="sugg" id="from-sugg" role="listbox"></div>
+          </div>
+          <div class="field">
+            <label class="f" for="to">To</label>
+            <input type="text" id="to" placeholder="e.g. Chawama" autocomplete="off">
+            <div class="sugg" id="to-sugg" role="listbox"></div>
+          </div>
+        </div>
+        <button class="btn ghost icon" id="swap" title="Swap From and To" aria-label="Swap From and To" style="margin-bottom:12px">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>
+        </button>
+      </div>
+      <button class="btn full" id="go">Find route</button>
+      <div class="quick" id="recent"></div>
+    </div>
+    <div id="results"></div>
+  </section>
+
+  <!-- MAP -->
+  <section class="view" id="view-map">
+    <div class="filters" id="hubfilter"></div>
+    <div class="mapwrap">
+      <svg id="map" role="img" aria-label="Schematic map of Lusaka minibus stops and routes"></svg>
+      <div class="mapctl">
+        <button id="zin" aria-label="Zoom in">+</button>
+        <button id="zout" aria-label="Zoom out">−</button>
+        <button id="zfit" aria-label="Fit whole city" style="font-size:14px">fit</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div id="stopcard"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="align-items:center">
+        <div class="grow small">Stop missing? Turn on add mode, then tap the map where it is.</div>
+        <button class="btn sm ghost" id="addstop">Add a stop</button>
+      </div>
+      <div id="addstopform"></div>
+    </div>
+    <p class="small">The map is a schematic: stop positions are approximate and lines join stops in order, not along real roads.</p>
+  </section>
+
+  <!-- ROUTES -->
+  <section class="view" id="view-routes">
+    <div class="card">
+      <h2>All routes</h2>
+      <p class="sub">Tap a route to confirm it still runs, dispute it, or report the fare you paid.</p>
+      <div class="field"><input type="text" id="rq" placeholder="Filter by route or stop name" autocomplete="off"></div>
+      <div class="filters" id="statusfilter"></div>
+      <ul class="rlist" id="rlist"></ul>
+    </div>
+  </section>
+
+  <!-- ADD -->
+  <section class="view" id="view-add">
+    <div class="card">
+      <h2>Add a route</h2>
+      <p class="sub">Know a route that's missing? Add its stops in the order the drop passes them. It shows as "New" until 3 riders confirm it.</p>
+      <div class="field">
+        <label class="f" for="rname">Route name (as on the board)</label>
+        <input type="text" id="rname" placeholder="e.g. City Market – Kanyama" maxlength="70">
+      </div>
+      <div class="field">
+        <label class="f" for="rveh">Vehicle</label>
+        <select id="rveh">
+          <option value="minibus">Minibus (drop)</option>
+          <option value="big_rosa">Big Rosa / bus</option>
+          <option value="shared_taxi">Shared taxi</option>
+        </select>
+      </div>
+      <label class="f">Stops in order</label>
+      <ol class="seq" id="seq"></ol>
+      <div class="row">
+        <div class="grow field" style="margin:0">
+          <input type="text" id="addq" placeholder="Type a stop name to add" autocomplete="off" aria-label="Stop to add">
+          <div class="sugg" id="add-sugg" role="listbox"></div>
+        </div>
+      </div>
+      <p class="small">You can also tap stops on the Map tab and choose "Add to new route".</p>
+      <div id="addmsg"></div>
+      <button class="btn full copper" id="submitroute" style="margin-top:8px">Submit route</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Sections">
+  <a href="#find" data-v="find"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Find</a>
+  <a href="#map" data-v="map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Map</a>
+  <a href="#routes" data-v="routes"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg>Routes</a>
+  <a href="#add" data-v="add"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</a>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* Local mode: replaces the shared online database with this browser's localStorage.
+   Data stays on this computer only. Reset: open DevTools console and run localStorage.removeItem("njila.localdb") */
+(function(){
+  const KEY="njila.localdb";
+  const SEEDS={"kt-chelstone":{"name":"Kulima Tower – Chelstone","vehicle":"minibus","stops":["kulima","mandahill","arcades","unza","chelstone"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-chainda":{"name":"Kulima Tower – Chainda","vehicle":"minibus","stops":["kulima","mandahill","arcades","unza","avondale","chainda"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-kamanga":{"name":"Kulima Tower – Obama (Kamanga)","vehicle":"minibus","stops":["kulima","mandahill","arcades","unza","chelstone","kamanga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-meanwood":{"name":"Kulima Tower – Meanwood Mtumbi","vehicle":"minibus","stops":["kulima","mandahill","arcades","unza","meanwood"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-mtendere":{"name":"Kulima Tower – Mtendere","vehicle":"minibus","stops":["kulima","mandahill","arcades","kalingalinga","mtendere"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-uth":{"name":"Kulima Tower – UTH","vehicle":"minibus","stops":["kulima","uth"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-woodlands":{"name":"Kulima Tower – Woodlands","vehicle":"minibus","stops":["kulima","uth","woodlands"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-bauleni":{"name":"Kulima Tower – Bauleni","vehicle":"minibus","stops":["kulima","uth","woodlands","bauleni"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-ibexhill":{"name":"Kulima Tower – Ibex Hill","vehicle":"minibus","stops":["kulima","uth","woodlands","kabulonga","ibexhill"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-shantumbu":{"name":"Kulima Tower – Shantumbu","vehicle":"minibus","stops":["kulima","uth","woodlands","kabulonga","ibexhill","shantumbu"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-kamwalasouth":{"name":"Kulima Tower – Kamwala South","vehicle":"minibus","stops":["kulima","kamwala","kamwalasouth"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-makenikonga":{"name":"Kulima Tower – Makeni Konga","vehicle":"minibus","stops":["kulima","kamwala","kafuerab","makenimall","makenikonga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-linda":{"name":"Kulima Tower – Linda","vehicle":"minibus","stops":["kulima","kamwala","kafuerab","makenimall","linda"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-lilayi":{"name":"Kulima Tower – Lilayi","vehicle":"minibus","stops":["kulima","kamwala","kafuerab","makenimall","lilayi"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-chilanga":{"name":"Kulima Tower – Chilanga","vehicle":"minibus","stops":["kulima","kamwala","kafuerab","makenimall","chilanga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-mandevu":{"name":"Kulima Tower – Mandevu","vehicle":"minibus","stops":["kulima","marapodi","mandevu"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-chipata":{"name":"Kulima Tower – Maplot (Chipata)","vehicle":"minibus","stops":["kulima","marapodi","mandevu","chipata"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-kabanana":{"name":"Kulima Tower – Kabanana","vehicle":"minibus","stops":["kulima","marapodi","mandevu","chipata","kabanana"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-zanimuone":{"name":"Kulima Tower – Zanimuone","vehicle":"minibus","stops":["kulima","marapodi","mandevu","chipata","kabanana","zanimuone"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-chunga":{"name":"Kulima Tower – Chunga","vehicle":"minibus","stops":["kulima","matero","chunga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-lilanda":{"name":"Kulima Tower – Lilanda","vehicle":"minibus","stops":["kulima","lilanda"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-zingalume":{"name":"Kulima Tower – Daina Kaimba (Zingalume)","vehicle":"minibus","stops":["kulima","lilanda","zingalume"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kt-garden":{"name":"Kulima Tower – Garden Chilulu","vehicle":"minibus","stops":["kulima","garden","gardenchilulu"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-chawama":{"name":"City Market – Chawama","vehicle":"minibus","stops":["citymkt","kafuerab","johnlaing","chawama"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-chelstone":{"name":"City Market – Chelstone","vehicle":"minibus","stops":["citymkt","mandahill","arcades","unza","chelstone"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-mtendere":{"name":"City Market – Mtendere","vehicle":"minibus","stops":["citymkt","mandahill","arcades","kalingalinga","mtendere"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-uth":{"name":"City Market – UTH","vehicle":"minibus","stops":["citymkt","uth"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-kabanana":{"name":"City Market – Kabanana","vehicle":"minibus","stops":["citymkt","marapodi","mandevu","chipata","kabanana"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-ngombe":{"name":"City Market – Ngombe","vehicle":"minibus","stops":["citymkt","mandahill","roma","ngombe"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-chunga":{"name":"City Market – Chunga","vehicle":"minibus","stops":["citymkt","matero","chunga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-chainda":{"name":"City Market – Chainda","vehicle":"minibus","stops":["citymkt","mandahill","arcades","unza","avondale","chainda"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-garden":{"name":"City Market – Garden Chilulu","vehicle":"minibus","stops":["citymkt","garden","gardenchilulu"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-kamanga":{"name":"City Market – Obama (Kamanga)","vehicle":"minibus","stops":["citymkt","mandahill","arcades","unza","chelstone","kamanga"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"cm-zanimuone":{"name":"City Market – Zanimuone","vehicle":"minibus","stops":["citymkt","marapodi","mandevu","chipata","kabanana","zanimuone"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"ml-zanimuone":{"name":"Millennium – Zanimuone","vehicle":"minibus","stops":["millennium","marapodi","mandevu","chipata","kabanana","zanimuone"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"mt-uth":{"name":"Mtendere – UTH","vehicle":"minibus","stops":["mtendere","kalingalinga","uth"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"mt-chilenje":{"name":"Mtendere – Chilenje","vehicle":"minibus","stops":["mtendere","kalingalinga","woodlands","chilenje"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"kl-munali":{"name":"Kalingalinga – Munali","vehicle":"minibus","stops":["kalingalinga","unza"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000},"mm-arcades":{"name":"Mass Media – Arcades","vehicle":"minibus","stops":["massmedia","arcades"],"source":"seed","status":"active","createdBy":"seed","createdAt":1793318400000}};
+  let mem;
+  function load(){ try{ const j=JSON.parse(localStorage.getItem(KEY)); if(j&&j.routes) return j; }catch(e){} return {routes:SEEDS,stops:{},votes:{}}; }
+  function save(){ try{ localStorage.setItem(KEY,JSON.stringify(mem)); }catch(e){} }
+  mem=load(); save();
+  const subs={routes:[],stops:[],votes:[]};
+  const snap=c=>({docs:Object.entries(mem[c]||{}).map(([id,d])=>({id,exists:true,data:()=>d,metadata:{fromCache:false,hasPendingWrites:false}})),get size(){return this.docs.length},get empty(){return !this.docs.length},docChanges:()=>[]});
+  const fire=c=>{ save(); (subs[c]||[]).forEach(f=>{ try{f(snap(c));}catch(e){console.error(e);} }); };
+  const docRef=(c,id)=>({id,path:c+"/"+id,
+    async get(){ const d=mem[c][id]; return {id,exists:!!d,data:()=>d}; },
+    async set(d){ mem[c][id]=JSON.parse(JSON.stringify(d)); fire(c); },
+    async update(d){ if(!mem[c][id]) throw {code:"invalid_argument",message:"missing"}; mem[c][id]={...mem[c][id],...d}; fire(c); },
+    async delete(){ delete mem[c][id]; fire(c); }});
+  const db={
+    collection(c){ mem[c]=mem[c]||{}; subs[c]=subs[c]||[]; return {path:c,
+      onSnapshot(n){ subs[c].push(n); setTimeout(()=>n(snap(c)),0); return ()=>{ subs[c]=subs[c].filter(x=>x!==n); }; },
+      async get(){ return snap(c); },
+      doc(id){ return docRef(c,id||Math.random().toString(36).slice(2,12)); },
+      async add(d){ const id=Math.random().toString(36).slice(2,12); await docRef(c,id).set(d); return docRef(c,id); } }; },
+    doc(path){ const [c,id]=path.split("/"); mem[c]=mem[c]||{}; return docRef(c,id); }
+  };
+  const user={ id:async()=>"local-user", can:async()=>true, canEdit:async()=>true, isOwner:async()=>true };
+  window.claude={ use: async n => n==="db"?db : n==="user"?user : null };
+})();
+</script>
+<script>
+"use strict";
+/* ------------------------------------------------------------------
+   Base geography: stop positions are APPROXIMATE (prototype only).
+   Routes, user-added stops, votes and fares live in the shared db.
+------------------------------------------------------------------- */
+const BASE_STOPS = [
+  ["kulima","Kulima Tower Station",-15.4128,28.2880,1,["Kulima Tower","Town"]],
+  ["citymkt","City Market Station",-15.4250,28.2790,1,["City Market","Town"]],
+  ["millennium","Millennium Station",-15.4195,28.2845,1,["Millenium","Town"]],
+  ["lumumba","Lumumba Station",-15.4185,28.2760,1,["Lumumba Road","Town"]],
+  ["intercity","Intercity Bus Terminus",-15.4213,28.2860,0,["Intercity"]],
+  ["mandahill","Manda Hill",-15.3985,28.3065,0,["Great East Rd"]],
+  ["massmedia","Mass Media",-15.4035,28.3195,0,["ZNBC"]],
+  ["arcades","Arcades",-15.3995,28.3225,0,["Great East Rd"]],
+  ["unza","UNZA / Munali",-15.3920,28.3290,0,["Munali","University of Zambia"]],
+  ["kalingalinga","Kalingalinga",-15.4060,28.3420,0,[]],
+  ["mtendere","Mtendere",-15.4060,28.3650,0,["Mutendere"]],
+  ["avondale","Avondale",-15.3830,28.3650,0,[]],
+  ["chainda","Chainda",-15.3905,28.3900,0,[]],
+  ["chelstone","Chelstone",-15.3705,28.3800,0,[]],
+  ["kamanga","Kamanga (Obama)",-15.3780,28.3950,0,["Obama"]],
+  ["meanwood","Meanwood Mtumbi",-15.3550,28.3500,0,["Mtumbi"]],
+  ["uth","UTH (University Teaching Hospital)",-15.4310,28.3140,0,["UTH","Hospital"]],
+  ["woodlands","Woodlands",-15.4320,28.3350,0,[]],
+  ["kabulonga","Kabulonga",-15.4200,28.3550,0,[]],
+  ["bauleni","Bauleni",-15.4470,28.3480,0,[]],
+  ["ibexhill","Ibex Hill",-15.4560,28.3700,0,[]],
+  ["shantumbu","Shantumbu",-15.5200,28.4800,0,["Leopards Hill"]],
+  ["chilenje","Chilenje",-15.4480,28.3230,0,[]],
+  ["kabwata","Kabwata",-15.4340,28.2960,0,[]],
+  ["kamwala","Kamwala",-15.4300,28.2870,0,[]],
+  ["kamwalasouth","Kamwala South",-15.4400,28.2930,0,[]],
+  ["kafuerab","Kafue Roundabout",-15.4320,28.2800,0,["Kafue Rd"]],
+  ["johnlaing","John Laing",-15.4450,28.2650,0,[]],
+  ["chawama","Chawama",-15.4560,28.2760,0,[]],
+  ["makenimall","Makeni Mall",-15.4650,28.2700,0,["Makeni","Kafue Rd"]],
+  ["makenikonga","Makeni Konga",-15.4800,28.2500,0,["Konga"]],
+  ["linda","Linda",-15.4950,28.2900,0,[]],
+  ["lilayi","Lilayi",-15.5100,28.3050,0,[]],
+  ["chilanga","Chilanga",-15.5600,28.2750,0,[]],
+  ["marapodi","Marapodi",-15.3900,28.2730,0,["Great North Rd"]],
+  ["mandevu","Mandevu",-15.3800,28.2700,0,[]],
+  ["chipata","Chipata (Maplot)",-15.3550,28.2850,0,["Maplot","Chipata Compound"]],
+  ["kabanana","Kabanana",-15.3400,28.2750,0,[]],
+  ["zanimuone","Zanimuone",-15.3250,28.2700,0,["Great North Rd"]],
+  ["roma","Roma",-15.3830,28.3050,0,[]],
+  ["ngombe","Ngombe",-15.3770,28.3100,0,[]],
+  ["garden","Garden",-15.3950,28.2650,0,[]],
+  ["gardenchilulu","Garden Chilulu",-15.3900,28.2580,0,["Chilulu"]],
+  ["matero","Matero",-15.3900,28.2450,0,[]],
+  ["chunga","Chunga",-15.3700,28.2350,0,[]],
+  ["lilanda","Lilanda",-15.3980,28.2400,0,["Mumbwa Rd"]],
+  ["zingalume","Zingalume (Daina Kaimba)",-15.4000,28.2200,0,["Daina Kaimba"]]
+].map(([id,name,lat,lng,hub,aliases]) => ({ id, name, lat, lng, hub: !!hub, aliases, base: true }));
+
+const HUBS = { kulima: { label: "Kulima Tower", color: "var(--kt)", hex: "#1f5fa8" },
+               citymkt: { label: "City Market", color: "var(--cm)", hex: "#c2571a" },
+               millennium: { label: "Millennium", color: "var(--ml)", hex: "#2f7d4a" } };
+const OTHER = { label: "Other", color: "var(--ot)", hex: "#7a4fa0" };
+const WALK_ORIGIN = 1000, WALK_TRANSFER = 900, WALK_HUB = 2200;
+
+const state = {
+  stops: new Map(BASE_STOPS.map(s => [s.id, s])),
+  routes: new Map(), votes: new Map(),
+  db: null, user: null, uid: null, canWrite: null, canEdit: false, writeBlocked: false,
+  ready: { routes: false },
+  from: null, to: null, results: [], highlight: null,
+  draft: [], hubFilter: "all", statusFilter: "all", openRoute: null,
+  mapPick: null, addingStop: false, newStopAt: null,
+};
+
+/* ---------------- utilities ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const R = 6371000, rad = d => d * Math.PI / 180;
+function hav(a, b) {
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const walkM = (a, b) => hav(a, b) * 1.2;
+const S = id => state.stops.get(id);
+const fmtM = m => m < 950 ? `${Math.round(m/50)*50} m` : `${(m/1000).toFixed(1)} km`;
+const fmtMin = m => m < 60 ? `${Math.round(m)} min` : `${Math.floor(m/60)} h ${Math.round(m%60)} min`;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), 2600); }
+function median(a) { if (!a.length) return null; const s = [...a].sort((x,y)=>x-y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1]+s[m])/2; }
+function hubOf(route) { return HUBS[route.stops[0]] ? route.stops[0] : HUBS[route.stops[route.stops.length-1]] ? route.stops[route.stops.length-1] : "other"; }
+function hubInfo(route) { const h = hubOf(route); return HUBS[h] || OTHER; }
+
+/* ---------------- crowd signals ---------------- */
+function signals(rid) {
+  let up = 0, down = 0; const fares = []; const now = Date.now();
+  for (const [, d] of state.votes) {
+    const v = d.votes && d.votes[rid];
+    if (v === 1) up++; else if (v === -1) down++;
+    const f = d.fares && d.fares[rid];
+    if (f && typeof f.amt === "number" && f.amt > 0 && f.amt < 500 && (!f.at || now - f.at < 90*864e5)) fares.push(f.amt);
+  }
+  const conf = up - down;
+  return { up, down, conf, fare: fares.length ? median(fares) : null, fareN: fares.length };
+}
+function status(route, sig) {
+  if (route.status === "retired") return { key: "ret", text: "Retired", cls: "b-ret" };
+  if (sig.conf <= -2) return { key: "dis", text: "Disputed", cls: "b-dis" };
+  if (sig.conf >= 3) return { key: "ver", text: `Confirmed by ${sig.up}`, cls: "b-ver" };
+  if (route.source === "seed") return { key: "seed", text: "From survey, needs confirming", cls: "b-seed" };
+  return { key: "new", text: sig.up ? `New, ${sig.up} confirmation${sig.up>1?"s":""}` : "New, 0 confirmations", cls: "b-new" };
+}
+const activeRoutes = () => [...state.routes.values()].filter(r => r.status !== "retired" && Array.isArray(r.stops) && r.stops.filter(id => S(id)).length >= 2);
+
+/* ---------------- route finder ---------------- */
+function nearby(id, radius) {
+  const s = S(id), out = new Map();
+  for (const t of state.stops.values()) { const m = t.id === id ? 0 : walkM(s, t); if (m <= radius) out.set(t.id, m); }
+  return out;
+}
+function buildIndex() {
+  const at = new Map(), tr = new Map();
+  for (const r of activeRoutes()) for (const id of r.stops) { if (!S(id)) continue; if (!at.has(id)) at.set(id, new Set()); at.get(id).add(r.id); }
+  for (const a of state.stops.values()) {
+    const list = [];
+    for (const b of state.stops.values()) {
+      const m = a.id === b.id ? 0 : walkM(a, b);
+      if (m <= ((a.hub && b.hub) ? WALK_HUB : WALK_TRANSFER)) list.push([b.id, m]);
+    }
+    tr.set(a.id, list);
+  }
+  return { at, tr };
+}
+function rideInfo(route, from, to) {
+  const st = route.stops.filter(id => S(id));
+  const i = st.indexOf(from), j = st.indexOf(to);
+  const seg = i <= j ? st.slice(i, j+1) : st.slice(j, i+1).reverse();
+  let d = 0; for (let k = 1; k < seg.length; k++) d += hav(S(seg[k-1]), S(seg[k])) * 1.25;
+  return { dist: d, stops: seg.length - 1, seg };
+}
+function search(o, dst) {
+  const { at, tr } = buildIndex();
+  const O = nearby(o, WALK_ORIGIN), D = nearby(dst, WALK_ORIGIN);
+  const out = [];
+  const direct = walkM(S(o), S(dst));
+  if (o !== dst && direct <= ((S(o).hub && S(dst).hub) ? WALK_HUB : WALK_ORIGIN)) {
+    out.push({ legs: [], walks: [{ from: o, to: dst, m: walkM(S(o), S(dst)) }], walkOnly: true });
+  }
+  let frontier = new Map();
+  for (const [s, w] of O) for (const rid of (at.get(s) || [])) {
+    const e = { route: rid, board: s, walk: w, ride: 0, legs: [], walks: [{ from: o, to: s, m: w }], used: new Set() };
+    const c = frontier.get(rid); if (!c || e.walk < c.walk) frontier.set(rid, e);
+  }
+  for (let round = 1; round <= 3; round++) {
+    const next = new Map();
+    for (const e of frontier.values()) {
+      const route = state.routes.get(e.route);
+      for (const x of route.stops) {
+        if (x === e.board || !S(x)) continue;
+        const leg = { route: e.route, from: e.board, to: x };
+        if (D.has(x)) out.push({ legs: [...e.legs, leg], walks: [...e.walks, { from: x, to: dst, m: D.get(x) }] });
+        if (round < 3) for (const [t, wt] of tr.get(x)) for (const r2 of (at.get(t) || [])) {
+          if (r2 === e.route || e.used.has(r2)) continue;
+          const ne = { route: r2, board: t, walk: e.walk + wt, ride: e.ride + rideInfo(route, e.board, x).dist, legs: [...e.legs, leg], walks: [...e.walks, { from: x, to: t, m: wt }], used: new Set([...e.used, e.route]) };
+          const c = next.get(r2);
+          if (!c || ne.legs.length * 100 + ne.walk / 20 + ne.ride / 250 < c.legs.length * 100 + c.walk / 20 + c.ride / 250) next.set(r2, ne);
+        }
+      }
+    }
+    frontier = next;
+  }
+  // score + dedupe
+  const best = new Map();
+  for (const it of out) {
+    const walk = it.walks.reduce((a, w) => a + w.m, 0);
+    let fare = 0, fareKnown = true, ride = 0, penalty = 0;
+    for (const l of it.legs) {
+      const r = state.routes.get(l.route), sig = signals(l.route), st = status(r, sig);
+      if (sig.fare != null && sig.fareN >= 1) fare += sig.fare; else fareKnown = false;
+      ride += rideInfo(r, l.from, l.to).dist;
+      if (st.key === "seed" || st.key === "new") penalty += 30;
+      if (st.key === "dis") penalty += 150;
+      penalty -= 5 * Math.max(0, Math.min(sig.conf, 6));
+    }
+    if (it.legs.some(l => l.from === l.to)) continue;
+    if (!it.walkOnly && ride > 2.5 * direct + 4000) continue; // drops away from town and back
+    const minutes = ride / 1000 / 18 * 60 + it.legs.length * 10 + walk / 1000 / 4.5 * 60;
+    const score = (it.walkOnly ? 60 : it.legs.length * 100) + walk / 20 + ride / 250 + (fareKnown ? fare : 0) + penalty;
+    // same boarding/alighting stops = same trip; other routes on that stretch become alternatives
+    const key = it.walkOnly ? "walk" : it.legs.map(l => l.from + "-" + l.to).join(">");
+    const rec = { ...it, walk, fare: it.legs.length && fareKnown ? fare : null, minutes, score };
+    const c = best.get(key);
+    if (!c) { rec.alts = it.legs.map(l => new Set([l.route])); best.set(key, rec); }
+    else {
+      const alts = c.alts; it.legs.forEach((l, i) => alts[i].add(l.route));
+      if (rec.score < c.score) { rec.alts = alts; best.set(key, rec); }
+    }
+  }
+  const list = [...best.values()].sort((a, b) => a.score - b.score);
+  // drop options that only add a change to a better option's first or last drop
+  const out2 = [];
+  const minLegs = Math.min(...list.map(i => i.legs.length)), fastest = Math.min(...list.map(i => i.minutes));
+  for (const it of list) {
+    if (it.legs.length > minLegs && it.minutes > fastest - 10) continue; // extra change that doesn't save time
+    const routesKey = it.legs.map(l => l.route);
+    if (out2.some(o => o.legs.length < it.legs.length && o.legs.every(l => routesKey.includes(l.route)))) continue;
+    out2.push(it);
+  }
+  return out2.slice(0, 5);
+}
+
+/* ---------------- autocomplete ---------------- */
+function matchStops(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const res = [];
+  for (const s of state.stops.values()) {
+    const names = [s.name, ...(s.aliases || [])].map(x => x.toLowerCase());
+    let sc = -1;
+    names.forEach((n, i) => { if (n.startsWith(q)) sc = Math.max(sc, i ? 2 : 3); else if (n.includes(q)) sc = Math.max(sc, 1); });
+    if (sc >= 0) res.push([sc + (s.hub ? .1 : 0), s]);
+  }
+  return res.sort((a, b) => b[0] - a[0] || a[1].name.localeCompare(b[1].name)).slice(0, 8).map(x => x[1]);
+}
+function servedBy(id) { return activeRoutes().filter(r => r.stops.includes(id)).length; }
+function autocomplete(input, box, onPick) {
+  let items = [], act = -1;
+  const render = () => {
+    items = matchStops(input.value);
+    if (!items.length) { box.classList.remove("on"); box.innerHTML = ""; return; }
+    box.innerHTML = items.map((s, i) => `<button type="button" role="option" class="${i===act?'act':''}" data-id="${esc(s.id)}">${esc(s.name)}<br><small>${s.hub ? "Bus station · " : ""}${servedBy(s.id)} route${servedBy(s.id)===1?"":"s"}${s.base ? "" : " · added by a rider"}</small></button>`).join("");
+    box.classList.add("on");
+  };
+  input.addEventListener("input", () => { act = -1; render(); });
+  input.addEventListener("focus", render);
+  input.addEventListener("keydown", e => {
+    if (!box.classList.contains("on")) return;
+    if (e.key === "ArrowDown") { act = Math.min(items.length - 1, act + 1); render(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { act = Math.max(0, act - 1); render(); e.preventDefault(); }
+    else if (e.key === "Enter") { const s = items[act >= 0 ? act : 0]; if (s) { pick(s); e.preventDefault(); } }
+    else if (e.key === "Escape") box.classList.remove("on");
+  });
+  const pick = s => { box.classList.remove("on"); onPick(s); };
+  box.addEventListener("mousedown", e => e.preventDefault());
+  box.addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b) pick(S(b.dataset.id)); });
+  input.addEventListener("blur", () => setTimeout(() => box.classList.remove("on"), 120));
+}
+
+/* ---------------- FIND view ---------------- */
+function setEnd(which, s) {
+  state[which] = s ? s.id : null;
+  $("#" + which).value = s ? s.name : "";
+}
+function resolveTyped(which) {
+  const v = $("#" + which).value.trim(); if (!v) return null;
+  const cur = state[which] && S(state[which]);
+  if (cur && cur.name === v) return cur;
+  const m = matchStops(v); return m[0] || null;
+}
+function runSearch(push = true) {
+  const a = resolveTyped("from"), b = resolveTyped("to");
+  setEnd("from", a); setEnd("to", b);
+  const box = $("#results");
+  if (!a || !b) { box.innerHTML = `<div class="card note">Choose both stops from the suggestions list.</div>`; return; }
+  if (a.id === b.id) { box.innerHTML = `<div class="card note">From and To are the same stop.</div>`; return; }
+  if (!state.ready.routes) { box.innerHTML = `<div class="card empty">Still loading routes…</div>`; return; }
+  state.results = search(a.id, b.id);
+  state.highlight = null;
+  if (push) remember(a, b);
+  renderResults();
+}
+function legHtml(l, i, alts) {
+  const r = state.routes.get(l.route), sig = signals(l.route), st = status(r, sig), ri = rideInfo(r, l.from, l.to);
+  const fare = sig.fare != null ? `K${sig.fare % 1 ? sig.fare.toFixed(2) : sig.fare} (median of ${sig.fareN})` : "fare not reported yet";
+  return `<li><span class="dot"></span>Board <span class="rname">${esc(r.name)}</span> at <b>${esc(S(l.from).name)}</b><br>
+    <span class="meta">Get off at <b>${esc(S(l.to).name)}</b> · ${ri.stops} stop${ri.stops===1?"":"s"} · ${fare}</span><br>
+    <span class="badge ${st.cls}">${esc(st.text)}</span>
+    ${alts && alts.size > 1 ? `<br><span class="small">Also works: ${[...alts].filter(x => x !== l.route).map(x => esc(state.routes.get(x).name)).join(", ")}</span>` : ""}</li>`;
+}
+function walkHtml(w, label) {
+  if (w.m < 30) return "";
+  return `<li class="walk"><span class="dot"></span><span class="meta">${label} ${esc(S(w.to).name)} · about ${fmtM(w.m)}</span></li>`;
+}
+function itinText(it) {
+  const a = S(state.from).name, b = S(state.to).name;
+  const lines = [`Njila: ${a} to ${b}`];
+  it.walks.forEach((w, i) => {
+    if (w.m >= 30) lines.push(`Walk to ${S(w.to).name} (~${fmtM(w.m)})`);
+    const l = it.legs[i]; if (l) lines.push(`Take "${state.routes.get(l.route).name}" from ${S(l.from).name}, get off at ${S(l.to).name}`);
+  });
+  return lines.join("\n");
+}
+function renderResults() {
+  const box = $("#results"), res = state.results;
+  const a = S(state.from), b = S(state.to);
+  if (!res.length) {
+    box.innerHTML = `<div class="card"><b>No route found yet from ${esc(a.name)} to ${esc(b.name)}.</b>
+      <p class="meta">Nobody has added a route that connects these stops within 3 drops. If you know one, add it so the next rider finds it.</p>
+      <button class="btn copper" id="prefill">Add a route from ${esc(a.name)}</button></div>`;
+    $("#prefill").onclick = () => { state.draft = [a.id, b.id]; renderDraft(); go("add"); };
+    return;
+  }
+  box.innerHTML = res.map((it, idx) => {
+    const n = it.legs.length;
+    const title = it.walkOnly ? "Walk" : `${n} drop${n>1?"s":""}${n>1 ? ` · ${n-1} change${n>2?"s":""}` : ""}`;
+    let steps = "";
+    it.walks.forEach((w, i) => {
+      steps += walkHtml(w, i === 0 ? "Walk to" : i === it.walks.length - 1 ? "Walk to" : "Walk to");
+      if (it.legs[i]) steps += legHtml(it.legs[i], i, it.alts && it.alts[i]);
+    });
+    steps += `<li class="end"><span class="dot"></span><b>${esc(b.name)}</b></li>`;
+    const fare = it.fare != null ? `about K${Math.round(it.fare)}` : (n ? "fare unknown" : "free");
+    return `<div class="card result ${idx===0?'best':''}">
+      <div class="rhead"><b>${title}</b><span class="meta">~${fmtMin(it.minutes)} (rough) · ${fare}${it.walk >= 30 ? ` · walk ${fmtM(it.walk)}` : ""}</span></div>
+      ${idx===0 ? `<div class="small" style="color:var(--copper);font-weight:700">Best option</div>` : ""}
+      <ol class="steps">${steps}</ol>
+      <div class="actions">
+        ${n ? `<button class="btn sm ghost" data-show="${idx}">Show on map</button>` : ""}
+        <button class="btn sm ghost" data-copy="${idx}">Copy for WhatsApp</button>
+        ${n ? `<button class="btn sm ghost" data-took="${idx}">I took this</button>` : ""}
+      </div>
+    </div>`;
+  }).join("") + `<p class="small">Times are rough: ride at 18 km/h plus about 10 min loading per drop. Every change means a new fare.</p>`;
+  box.querySelectorAll("[data-show]").forEach(bt => bt.onclick = () => { state.highlight = res[+bt.dataset.show]; go("map"); fitTo(state.highlight); });
+  box.querySelectorAll("[data-copy]").forEach(bt => bt.onclick = async () => {
+    try { await navigator.clipboard.writeText(itinText(res[+bt.dataset.copy])); toast("Copied. Paste it into WhatsApp."); }
+    catch { toast("Couldn't copy here. Select the text instead."); }
+  });
+  box.querySelectorAll("[data-took]").forEach(bt => bt.onclick = () => {
+    const it = res[+bt.dataset.took]; state.openRoute = it.legs[0].route; state.routeQuery = ""; go("routes");
+    toast("Confirm each route you rode, and add the fare you paid.");
+  });
+}
+function remember(a, b) {
+  try {
+    const k = "njila.recent"; let r = JSON.parse(localStorage.getItem(k) || "[]");
+    r = [[a.id, b.id], ...r.filter(x => !(x[0] === a.id && x[1] === b.id))].slice(0, 4);
+    localStorage.setItem(k, JSON.stringify(r));
+  } catch {}
+  renderRecent();
+}
+function renderRecent() {
+  let r = []; try { r = JSON.parse(localStorage.getItem("njila.recent") || "[]"); } catch {}
+  r = r.filter(x => S(x[0]) && S(x[1]));
+  const examples = r.length ? r : [["chelstone","chawama"],["unza","uth"],["matero","makenimall"]];
+  $("#recent").innerHTML = `<span class="small" style="width:100%;margin-top:8px">${r.length ? "Recent" : "Try"}:</span>` + examples.map(([x, y]) =>
+    `<button class="chip" data-a="${x}" data-b="${y}">${esc(S(x).name.split(" (")[0])} → ${esc(S(y).name.split(" (")[0])}</button>`).join("");
+  $("#recent").querySelectorAll(".chip").forEach(c => c.onclick = () => { setEnd("from", S(c.dataset.a)); setEnd("to", S(c.dataset.b)); runSearch(); });
+}
+
+/* ---------------- MAP view ---------------- */
+const svgNS = "http://www.w3.org/2000/svg";
+const proj = (() => {
+  const all = BASE_STOPS; let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
+  for (const s of all) { a = Math.min(a, s.lat); b = Math.max(b, s.lat); c = Math.min(c, s.lng); d = Math.max(d, s.lng); }
+  const k = 4000, cos = Math.cos(rad((a + b) / 2));
+  return { k, cos, maxLat: b, minLng: c,
+    x: lng => (lng - c) * cos * k, y: lat => (b - lat) * k,
+    lng: x => x / (cos * k) + c, lat: y => b - y / k,
+    W: (d - c) * cos * k, H: (b - a) * k };
+})();
+let vb = null;
+function fitAll() { vb = { x: -40, y: -40, w: proj.W + 80, h: proj.H + 80 }; applyVB(); }
+function fitTo(it) {
+  const ids = new Set(); it.legs.forEach(l => rideInfo(state.routes.get(l.route), l.from, l.to).seg.forEach(id => ids.add(id)));
+  if (state.from) ids.add(state.from); if (state.to) ids.add(state.to);
+  const xs = [...ids].map(id => proj.x(S(id).lng)), ys = [...ids].map(id => proj.y(S(id).lat));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const w = Math.max(x1 - x0, 120) + 120, h = Math.max(y1 - y0, 120) + 120;
+  vb = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }; applyVB(); renderMap();
+}
+function applyVB() { const m = $("#map"); if (!vb) return; m.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); m.dataset.scale = vb.w; }
+function el(tag, attrs, parent) { const e = document.createElementNS(svgNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function renderMap() {
+  const m = $("#map"); if (!vb) fitAll();
+  m.innerHTML = "";
+  const bw = m.getBoundingClientRect(), u = Math.max(vb.w / (bw.width || 700), vb.h / (bw.height || 500)); // 1u = 1 screen px
+  const routes = activeRoutes().filter(r => state.hubFilter === "all" || hubOf(r) === state.hubFilter);
+  const hl = state.highlight;
+  const gR = el("g", { "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none" }, m);
+  for (const r of routes) {
+    const pts = r.stops.filter(id => S(id)).map(id => `${proj.x(S(id).lng).toFixed(1)},${proj.y(S(id).lat).toFixed(1)}`).join(" ");
+    const st = status(r, signals(r.id));
+    el("polyline", { points: pts, stroke: hubInfo(r).hex, "stroke-width": (hl ? 1.6 : 2.6) * u, "stroke-opacity": hl ? .18 : .55,
+      "stroke-dasharray": (st.key === "new" || st.key === "seed") ? `${6*u} ${4*u}` : "none" }, gR);
+  }
+  if (hl) {
+    hl.legs.forEach(l => {
+      const r = state.routes.get(l.route), seg = rideInfo(r, l.from, l.to).seg;
+      el("polyline", { points: seg.map(id => `${proj.x(S(id).lng)},${proj.y(S(id).lat)}`).join(" "), stroke: hubInfo(r).hex, "stroke-width": 7 * u, "stroke-opacity": .95 }, gR);
+    });
+    hl.walks.forEach(w => { if (w.m < 30) return; el("line", { x1: proj.x(S(w.from).lng), y1: proj.y(S(w.from).lat), x2: proj.x(S(w.to).lng), y2: proj.y(S(w.to).lat), stroke: "#5c645f", "stroke-width": 3 * u, "stroke-dasharray": `${2*u} ${5*u}` }, gR); });
+  }
+  const used = new Set(routes.flatMap(r => r.stops));
+  const hlStops = new Set(); if (hl) hl.legs.forEach(l => { hlStops.add(l.from); hlStops.add(l.to); });
+  const gS = el("g", {}, m), gL = el("g", { "font-family": "Atkinson Hyperlegible, sans-serif" }, m);
+  for (const s of state.stops.values()) {
+    const x = proj.x(s.lng), y = proj.y(s.lat);
+    const isEnd = s.id === state.from || s.id === state.to, isPick = s.id === state.mapPick, inDraft = state.draft.includes(s.id);
+    const r = (s.hub ? 7 : isEnd ? 7 : 4.5) * u;
+    const c = el("circle", { cx: x, cy: y, r: r + (isPick ? 2*u : 0), fill: isEnd ? "#b4582a" : s.hub ? "#1d2320" : "#fff",
+      stroke: inDraft ? "#b4582a" : "#1d2320", "stroke-width": (inDraft ? 3 : 1.6) * u, opacity: used.has(s.id) || isEnd || !s.base ? 1 : .45 }, gS);
+    c.dataset.id = s.id; c.style.cursor = "pointer";
+    el("circle", { cx: x, cy: y, r: 16 * u, fill: "transparent", "data-id": s.id, style: "cursor:pointer" }, gS);
+    const big = s.hub || isEnd || hlStops.has(s.id) || isPick;
+    const zoomed = vb.w < proj.W * 0.55, mainHub = s.id === "kulima" || s.id === "citymkt";
+    if (isEnd || isPick || hlStops.has(s.id) || mainHub || zoomed) {
+      const left = s.id === "lumumba";
+      const t = el("text", { x: x + (left ? -10 : 10) * u, y: y + 4 * u, "text-anchor": left ? "end" : "start", "font-size": (big ? 14 : 11.5) * u, "font-weight": big ? 700 : 400, fill: "#1d2320",
+        stroke: "#fbf8f1", "stroke-width": 3.5 * u, "paint-order": "stroke" }, gL);
+      t.textContent = s.name.replace(" Station", "").replace(" (University Teaching Hospital)", "");
+    }
+  }
+  if (state.newStopAt) el("circle", { cx: proj.x(state.newStopAt.lng), cy: proj.y(state.newStopAt.lat), r: 8 * u, fill: "#b4582a", stroke: "#fff", "stroke-width": 2 * u }, gS);
+  renderStopCard();
+}
+function renderLegend() {
+  const items = [["kulima", HUBS.kulima], ["citymkt", HUBS.citymkt], ["millennium", HUBS.millennium], ["other", OTHER]];
+  $("#legend").innerHTML = items.map(([, h]) => `<span><i style="background:${h.hex}"></i>${h.label} routes</span>`).join("") +
+    `<span><i style="background:repeating-linear-gradient(90deg,#888 0 6px,transparent 6px 10px)"></i>Not yet confirmed</span>`;
+  $("#hubfilter").innerHTML = [["all", "All routes"], ...items.map(([k, h]) => [k, h.label])].map(([k, l]) =>
+    `<button class="chip ${state.hubFilter===k?'on':''}" data-h="${k}">${l}</button>`).join("");
+  $("#hubfilter").querySelectorAll(".chip").forEach(c => c.onclick = () => { state.hubFilter = c.dataset.h; renderLegend(); renderMap(); });
+}
+function renderStopCard() {
+  const box = $("#stopcard"); const s = state.mapPick && S(state.mapPick);
+  if (!s) { box.innerHTML = state.highlight ? `<div class="card stopcard note green">Showing your trip. <button class="btn sm ghost" id="clearhl">Clear</button></div>` : "";
+    if ($("#clearhl")) $("#clearhl").onclick = () => { state.highlight = null; renderMap(); }; return; }
+  const rs = activeRoutes().filter(r => r.stops.includes(s.id));
+  box.innerHTML = `<div class="card stopcard"><b>${esc(s.name)}</b> <span class="small">${s.hub ? "Bus station" : "Stop"}${s.base ? "" : " · added by a rider"}</span>
+    <p class="meta" style="margin:6px 0 10px">${rs.length ? rs.map(r => esc(r.name)).join(" · ") : "No routes stop here yet."}</p>
+    <div class="actions"><button class="btn sm" id="sf">From here</button><button class="btn sm" id="stt">To here</button>
+    <button class="btn sm ghost" id="sd">${state.draft.includes(s.id) ? "In your new route" : "Add to new route"}</button></div></div>`;
+  $("#sf").onclick = () => { setEnd("from", s); state.mapPick = null; go("find"); if (state.to) runSearch(); };
+  $("#stt").onclick = () => { setEnd("to", s); state.mapPick = null; go("find"); if (state.from) runSearch(); };
+  $("#sd").onclick = () => { if (!state.draft.includes(s.id)) { state.draft.push(s.id); renderDraft(); toast(`Added ${s.name} as stop ${state.draft.length}`); renderMap(); } };
+}
+function initMapInteraction() {
+  const m = $("#map"); let drag = null;
+  const toSvg = (cx, cy) => { const b = m.getBoundingClientRect(); const s = Math.max(vb.w / b.width, vb.h / b.height);
+    const ox = vb.x - (b.width * s - vb.w) / 2, oy = vb.y - (b.height * s - vb.h) / 2; return { x: ox + (cx - b.left) * s, y: oy + (cy - b.top) * s, s }; };
+  m.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, moved: false }; m.setPointerCapture(e.pointerId); });
+  m.addEventListener("pointermove", e => {
+    if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+    if (drag.moved) { const s = toSvg(0, 0).s; vb.x = drag.vx - dx * s; vb.y = drag.vy - dy * s; applyVB(); }
+  });
+  m.addEventListener("pointerup", e => {
+    const d = drag; drag = null; if (!d) return;
+    if (d.moved) { renderMap(); return; }
+    const p = toSvg(e.clientX, e.clientY);
+    if (state.addingStop) { state.newStopAt = { lat: proj.lat(p.y), lng: proj.lng(p.x) }; renderMap(); renderAddStopForm(); return; }
+    let best = null, bd = Infinity;
+    for (const s of state.stops.values()) { const dd = Math.hypot(proj.x(s.lng) - p.x, proj.y(s.lat) - p.y); if (dd < bd) { bd = dd; best = s; } }
+    state.mapPick = best && bd < 22 * p.s ? best.id : null; renderMap();
+  });
+  m.addEventListener("wheel", e => { e.preventDefault(); zoom(e.deltaY < 0 ? .8 : 1.25, toSvg(e.clientX, e.clientY)); }, { passive: false });
+  $("#zin").onclick = () => zoom(.7); $("#zout").onclick = () => zoom(1.4); $("#zfit").onclick = () => { fitAll(); renderMap(); };
+}
+function zoom(f, at) {
+  const cx = at ? at.x : vb.x + vb.w / 2, cy = at ? at.y : vb.y + vb.h / 2;
+  const w = Math.min(Math.max(vb.w * f, 60), proj.W * 2.5), h = w * vb.h / vb.w;
+  vb = { x: cx - (cx - vb.x) * w / vb.w, y: cy - (cy - vb.y) * h / vb.h, w, h }; applyVB(); renderMap();
+}
+function renderAddStopForm() {
+  const box = $("#addstopform");
+  if (!state.addingStop) { box.innerHTML = ""; return; }
+  if (!state.newStopAt) { box.innerHTML = `<p class="note" style="margin:10px 0 0">Tap the map where the stop is.</p>`; return; }
+  box.innerHTML = `<div style="margin-top:10px"><div class="field"><label class="f" for="nsname">Stop name</label>
+    <input type="text" id="nsname" maxlength="60" placeholder="e.g. Kanyama Market"></div>
+    <div class="actions"><button class="btn sm copper" id="nssave">Save stop</button><button class="btn sm ghost" id="nscancel">Cancel</button></div></div>`;
+  $("#nsname").focus();
+  $("#nscancel").onclick = () => { state.addingStop = false; state.newStopAt = null; $("#addstop").textContent = "Add a stop"; $("#map").classList.remove("adding"); renderAddStopForm(); renderMap(); };
+  $("#nssave").onclick = saveStop;
+}
+
+/* ---------------- ROUTES view ---------------- */
+function renderRoutes() {
+  const q = ($("#rq").value || "").trim().toLowerCase();
+  const all = [...state.routes.values()].filter(r => Array.isArray(r.stops));
+  const rows = all.map(r => ({ r, sig: signals(r.id) })).map(x => ({ ...x, st: status(x.r, x.sig) }))
+    .filter(x => state.statusFilter === "all" ? x.st.key !== "ret" : x.st.key === state.statusFilter)
+    .filter(x => !q || x.r.name.toLowerCase().includes(q) || x.r.stops.some(id => S(id) && S(id).name.toLowerCase().includes(q)))
+    .sort((a, b) => a.r.name.localeCompare(b.r.name));
+  const counts = {}; all.forEach(r => { const k = status(r, signals(r.id)).key; counts[k] = (counts[k] || 0) + 1; });
+  const fs = [["all","All"],["ver","Confirmed"],["seed","From survey"],["new","New"],["dis","Disputed"]].concat(state.canEdit ? [["ret","Retired"]] : []);
+  $("#statusfilter").innerHTML = fs.map(([k, l]) => `<button class="chip ${state.statusFilter===k?'on':''}" data-s="${k}">${l}${k!=="all" && counts[k] ? ` (${counts[k]})` : ""}</button>`).join("");
+  $("#statusfilter").querySelectorAll(".chip").forEach(c => c.onclick = () => { state.statusFilter = c.dataset.s; renderRoutes(); });
+  const list = $("#rlist");
+  if (!state.ready.routes) { list.innerHTML = `<li class="empty">Loading routes…</li>`; return; }
+  if (!rows.length) { list.innerHTML = `<li class="empty">${all.length ? "No routes match." : "No routes yet. Be the first to add one."}</li>`; return; }
+  const mine = myDoc();
+  list.innerHTML = rows.map(({ r, sig, st }) => {
+    const open = state.openRoute === r.id, v = mine.votes[r.id] || 0, myFare = mine.fares[r.id];
+    return `<li><button class="ritem" data-r="${esc(r.id)}" aria-expanded="${open}"><span class="swatch" style="background:${hubInfo(r).hex}"></span>
+      <span style="flex:1;min-width:0"><b>${esc(r.name)}</b> <span class="badge ${st.cls}">${esc(st.text)}</span><br><span class="meta">${vehLabel(r.vehicle)} · ${sig.fare != null ? `K${sig.fare} median` : "no fare yet"} · ${sig.up} confirm${sig.up===1?"":"s"}, ${sig.down} dispute${sig.down===1?"":"s"}</span></span></button>
+      ${open ? `<div class="rdetail">
+        <div class="stopseq">${r.stops.map(id => S(id) ? esc(S(id).name) : "<i>removed stop</i>").join(" → ")}</div>
+        <div class="small">${r.source === "seed" ? "Route name from the WRI / Transport for Cairo Lusaka Transit Map (2024); stop order approximated, needs riders to confirm." : "Added by a rider."}</div>
+        <div class="actions" style="margin-top:10px">
+          <button class="btn sm ${v===1?'':'ghost'}" data-vote="1" ${canWriteUI()?'':'disabled'}>${v===1 ? "✓ You confirmed" : "Still runs"}</button>
+          <button class="btn sm ${v===-1?'copper':'ghost'}" data-vote="-1" ${canWriteUI()?'':'disabled'}>${v===-1 ? "✓ You disputed" : "Wrong / stopped"}</button>
+        </div>
+        <div class="farebox"><label class="small" for="fare-${esc(r.id)}">Fare you paid (K)</label>
+          <input type="number" min="1" max="200" step="0.5" id="fare-${esc(r.id)}" value="${myFare ? myFare.amt : ""}" ${canWriteUI()?'':'disabled'}>
+          <button class="btn sm ghost" data-fare="1" ${canWriteUI()?'':'disabled'}>Save</button></div>
+        ${state.canEdit ? `<div class="actions" style="margin-top:10px"><button class="btn sm ghost" data-retire="1">${r.status === "retired" ? "Restore route" : "Retire route (curator)"}</button></div>` : ""}
+      </div>` : ""}</li>`;
+  }).join("");
+  list.querySelectorAll("button.ritem").forEach(b => b.onclick = () => { state.openRoute = state.openRoute === b.dataset.r ? null : b.dataset.r; renderRoutes(); });
+  const det = list.querySelector(".rdetail");
+  if (det) {
+    const rid = state.openRoute;
+    det.querySelectorAll("[data-vote]").forEach(b => b.onclick = () => vote(rid, +b.dataset.vote));
+    const fb = det.querySelector("[data-fare]"); if (fb) fb.onclick = () => reportFare(rid, parseFloat(det.querySelector("input[type=number]").value));
+    const rt = det.querySelector("[data-retire]"); if (rt) rt.onclick = () => retire(rid);
+  }
+}
+const vehLabel = v => ({ minibus: "Minibus", big_rosa: "Big Rosa", shared_taxi: "Shared taxi" }[v] || "Minibus");
+
+/* ---------------- ADD view ---------------- */
+function renderDraft() {
+  const ol = $("#seq");
+  ol.innerHTML = state.draft.length ? state.draft.map((id, i) => `<li><span>${esc(S(id) ? S(id).name : id)}</span>
+    <button aria-label="Move up" data-up="${i}" ${i===0?'disabled':''}>↑</button><button aria-label="Move down" data-dn="${i}" ${i===state.draft.length-1?'disabled':''}>↓</button><button aria-label="Remove" data-rm="${i}">×</button></li>`).join("")
+    : `<li style="counter-increment:none" class="small">No stops yet. Start with the station the drop leaves from.</li>`;
+  ol.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [state.draft[i-1], state.draft[i]] = [state.draft[i], state.draft[i-1]]; renderDraft(); });
+  ol.querySelectorAll("[data-dn]").forEach(b => b.onclick = () => { const i = +b.dataset.dn; [state.draft[i+1], state.draft[i]] = [state.draft[i], state.draft[i+1]]; renderDraft(); });
+  ol.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { state.draft.splice(+b.dataset.rm, 1); renderDraft(); });
+  if (!$("#rname").value && state.draft.length >= 2) $("#rname").placeholder = `${S(state.draft[0]).name.replace(" Station","")} – ${S(state.draft[state.draft.length-1]).name.replace(" Station","")}`;
+  $("#submitroute").disabled = !canWriteUI();
+  if (!canWriteUI()) $("#addmsg").innerHTML = `<p class="note">${writeBlockedReason()}</p>`;
+}
+
+/* ---------------- writes ---------------- */
+function canWriteUI() { return !!state.db && !!state.uid && state.canWrite !== false && !state.writeBlocked; }
+function writeBlockedReason() {
+  if (!state.db) return "Sign in to claude.ai to add routes, votes and fares.";
+  if (state.canWrite === false || state.writeBlocked) return "You can view routes, but your access to this page is read-only. Ask the owner for Contributor access to add or vote.";
+  return "Sign-in needed to contribute.";
+}
+function myDoc() {
+  const d = state.uid && state.votes.get(state.uid);
+  return { votes: { ...((d && d.votes) || {}) }, fares: { ...((d && d.fares) || {}) } };
+}
+let writeChain = Promise.resolve();
+function writeMine(mut, okMsg) {
+  if (!canWriteUI()) { toast(writeBlockedReason()); return; }
+  const doc = myDoc(); mut(doc);
+  state.votes.set(state.uid, doc); renderRoutes(); // optimistic
+  writeChain = writeChain.then(() => state.db.doc("votes/" + state.uid).set(doc)).then(() => okMsg && toast(okMsg)).catch(handleWriteErr);
+}
+function handleWriteErr(e) {
+  if (e && e.code === "invalid_argument") { state.writeBlocked = true; toast(writeBlockedReason()); renderRoutes(); renderDraft(); }
+  else if (e && e.code === "quota_exceeded") toast("The shared database is full. Tell the page owner.");
+  else toast("Couldn't save just now. Try again in a moment.");
+}
+function vote(rid, v) { writeMine(d => { if (d.votes[rid] === v) delete d.votes[rid]; else d.votes[rid] = v; }, "Thanks, your vote is saved."); }
+function reportFare(rid, amt) {
+  if (!(amt >= 1 && amt <= 200)) { toast("Enter the fare in kwacha, between 1 and 200."); return; }
+  writeMine(d => { d.fares[rid] = { amt: Math.round(amt * 2) / 2, at: Date.now() }; }, "Fare saved. Thanks!");
+}
+async function retire(rid) {
+  const r = state.routes.get(rid); if (!r) return;
+  try { await state.db.doc("routes/" + rid).update({ status: r.status === "retired" ? "active" : "retired" }); toast("Route updated."); } catch (e) { handleWriteErr(e); }
+}
+async function submitRoute() {
+  if (!canWriteUI()) { toast(writeBlockedReason()); return; }
+  const stops = state.draft.filter(id => S(id));
+  const name = ($("#rname").value.trim() || $("#rname").placeholder).trim();
+  const msg = $("#addmsg");
+  if (stops.length < 2) { msg.innerHTML = `<p class="note">Add at least 2 stops, in the order the drop passes them.</p>`; return; }
+  if (new Set(stops).size !== stops.length) { msg.innerHTML = `<p class="note">A stop appears twice. Remove the duplicate.</p>`; return; }
+  if (!name || name.startsWith("e.g.")) { msg.innerHTML = `<p class="note">Give the route a name, as written on the minibus board.</p>`; return; }
+  const dup = activeRoutes().find(r => r.stops.join() === stops.join() || r.stops.join() === [...stops].reverse().join());
+  if (dup) { msg.innerHTML = `<p class="note">That route already exists as “${esc(dup.name)}”. Confirm it on the Routes tab instead.</p>`; return; }
+  $("#submitroute").disabled = true;
+  try {
+    const ref = await state.db.collection("routes").add({ name: name.slice(0, 70), vehicle: $("#rveh").value, stops, source: "user", status: "active", createdBy: state.uid, createdAt: Date.now() });
+    state.draft = []; $("#rname").value = ""; $("#rname").placeholder = "e.g. City Market – Kanyama";
+    renderDraft();
+    msg.innerHTML = `<p class="note green">Route added. It shows as "New" until 3 riders confirm it.</p>`;
+    writeMine(d => { d.votes[ref.id] = 1; });
+  } catch (e) { handleWriteErr(e); }
+  finally { $("#submitroute").disabled = !canWriteUI(); }
+}
+async function saveStop() {
+  if (!canWriteUI()) { toast(writeBlockedReason()); return; }
+  const name = $("#nsname").value.trim(); const at = state.newStopAt;
+  if (name.length < 3) { toast("Give the stop a name (3+ letters)."); return; }
+  const near = [...state.stops.values()].find(s => s.name.toLowerCase() === name.toLowerCase() || hav(s, at) < 120);
+  if (near) { toast(`${near.name} is already there. Use that stop.`); return; }
+  try {
+    await state.db.collection("stops").add({ name: name.slice(0, 60), lat: +at.lat.toFixed(5), lng: +at.lng.toFixed(5), createdBy: state.uid, createdAt: Date.now() });
+    toast(`Saved ${name}. You can now use it in routes.`);
+    state.addingStop = false; state.newStopAt = null; $("#addstop").textContent = "Add a stop"; $("#map").classList.remove("adding");
+    renderAddStopForm(); renderMap();
+  } catch (e) { handleWriteErr(e); }
+}
+
+/* ---------------- navigation ---------------- */
+const VIEWS = ["find", "map", "routes", "add"];
+function go(v) { if (location.hash !== "#" + v) location.hash = v; else show(v); }
+function show(v) {
+  if (!VIEWS.includes(v)) v = "find";
+  VIEWS.forEach(x => $("#view-" + x).classList.toggle("on", x === v));
+  document.querySelectorAll("nav.tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
+  if (v === "map") renderMap(); if (v === "routes") renderRoutes(); if (v === "add") renderDraft();
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+
+function refreshAll() {
+  const n = activeRoutes().length;
+  $("#status").textContent = !state.db ? "Offline view" : !state.ready.routes ? "Loading…" : `${n} route${n===1?"":"s"} · ${state.stops.size} stops`;
+  const v = location.hash.slice(1) || "find";
+  if (v === "routes") renderRoutes(); if (v === "map") renderMap(); if (v === "add") renderDraft();
+  if (v === "find" && state.results.length && state.from && state.to) { state.results = search(state.from, state.to); renderResults(); }
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  autocomplete($("#from"), $("#from-sugg"), s => { setEnd("from", s); if (state.to) runSearch(); else $("#to").focus(); });
+  autocomplete($("#to"), $("#to-sugg"), s => { setEnd("to", s); if (state.from) runSearch(); });
+  autocomplete($("#addq"), $("#add-sugg"), s => { if (!state.draft.includes(s.id)) state.draft.push(s.id); $("#addq").value = ""; renderDraft(); });
+  $("#go").onclick = () => runSearch();
+  $("#swap").onclick = () => { const a = state.from, b = state.to; setEnd("from", b && S(b)); setEnd("to", a && S(a)); if (a && b) runSearch(); };
+  $("#rq").addEventListener("input", renderRoutes);
+  $("#submitroute").onclick = submitRoute;
+  $("#addstop").onclick = () => {
+    if (!state.addingStop && !canWriteUI()) { toast(writeBlockedReason()); return; }
+    state.addingStop = !state.addingStop; state.newStopAt = null;
+    $("#addstop").textContent = state.addingStop ? "Stop adding" : "Add a stop";
+    $("#map").classList.toggle("adding", state.addingStop); renderAddStopForm(); renderMap();
+  };
+  initMapInteraction(); renderLegend(); renderRecent();
+  show(location.hash.slice(1) || "find");
+  connect();
+}
+async function connect() {
+  const cl = window.claude;
+  if (!cl || typeof cl.use !== "function") { offline(); return; }
+  let db = null, user = null;
+  try { [db, user] = await Promise.all([cl.use("db"), cl.use("user")]); } catch {}
+  if (!db) { offline(); return; }
+  state.db = db; state.user = user;
+  if (user) {
+    try { state.uid = await user.id(); } catch {}
+    try { const c = await user.can("data.write"); state.canWrite = c === null ? null : !!c; } catch {}
+    try { state.canEdit = !!(await user.canEdit()); } catch {}
+  }
+  db.collection("routes").onSnapshot(snap => {
+    state.routes = new Map(snap.docs.filter(d => d.exists).map(d => [d.id, { id: d.id, ...d.data(), stops: [...((d.data() || {}).stops || [])] }]));
+    state.ready.routes = true; refreshAll();
+  }, () => { state.ready.routes = true; refreshAll(); });
+  db.collection("stops").onSnapshot(snap => {
+    const m = new Map(BASE_STOPS.map(s => [s.id, s]));
+    snap.docs.forEach(d => { const x = d.data(); if (d.exists && x && typeof x.lat === "number" && typeof x.lng === "number" && x.name)
+      m.set("u_" + d.id, { id: "u_" + d.id, name: String(x.name), lat: x.lat, lng: x.lng, hub: false, aliases: [], base: false, docId: d.id }); });
+    state.stops = m; refreshAll();
+  }, () => {});
+  db.collection("votes").onSnapshot(snap => {
+    state.votes = new Map(snap.docs.filter(d => d.exists).map(d => [d.id, d.data() || {}])); refreshAll();
+  }, () => {});
+  refreshAll();
+}
+function offline() {
+  state.ready.routes = true;
+  $("#status").textContent = "Not signed in";
+  $("#results").innerHTML = `<div class="card note">Routes are shared between signed-in riders. Open this page while signed in to claude.ai to load them.</div>`;
+  refreshAll();
+}
+boot();
+</script>
+</body>
+</html>
